@@ -10,6 +10,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from . import forms
 from django.contrib.auth import login, authenticate
+import pandas as pd
 
 
 def user_register(request):
@@ -57,34 +58,19 @@ def user_bulk_upload(request):
     if request.method == 'POST':
         form = UserBulkUploadForm(request.POST, request.FILES)
         if form.is_valid():
-            # here Read data from uploaded CSV file
             csv_file = request.FILES['csv_file']
-            if not csv_file.name.endswith('.csv'):
-                messages.error(request, 'Please upload a CSV file.')
-                return render(request, 'user_bulk_upload.html', {'form': form})
-            csv_data = csv.reader(csv_file.read().decode('utf-8').splitlines())
-            next(csv_data)
+            data = pd.read_csv(csv_file)
+            for index, row in data.iterrows():
+                if 'username' in row and 'email' in row and 'password' in row:
+                    if User.objects.filter(username=row['username']).exists() or User.objects.filter(
+                            email=row['email']).exists():
+                        continue
+                    user = User.objects.create(username=row['username'], email=row['email'], password=row['password'])
 
-            # here Store user data in database
-            for row in csv_data:
-                user = User(
-                    username=row[0],
-                    email=row[1],
-                    country=row[2]
-                )
-                user.save()
-            messages.success(request, 'Users successfully uploaded.')
-
+            return redirect('dashboard')
     else:
         form = UserBulkUploadForm()
-
-    # user table data with filter using country
-    country_filter = request.GET.get('country')
-    if country_filter:
-        users = User.objects.filter(country__iexact=country_filter)
-    else:
-        users = User.objects.all()
-    return render(request, 'user_bulk_upload.html', {'form': form, 'users': users})
+    return render(request, 'user_bulk_upload.html', {'form': form})
 
 
 def user_list(request):
